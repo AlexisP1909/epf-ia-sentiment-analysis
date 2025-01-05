@@ -1,5 +1,21 @@
+# -*- coding: utf-8 -*-
+"""
+Created on Tue Jul 02 11:43:05 2019
+
+@author: uzaymacar
+
+Script containing an example and guideline for training binary sentiment classification models
+using the implemented @SelfAttention() layer.
+
+Usage:
+  # Train a simple multi-layer perceptron model:
+  python sentiment_classification.py
+  # Train simple multi-layer perceptron model with non-penalized self-attention:
+  python sentiment_classification.py --config=1
+  # Check CONFIG OPTIONS comment block for more options
+"""
+
 from layers import SelfAttention
-import pandas as pd
 import argparse
 import tensorflow as tf
 from tensorflow.keras.datasets import imdb
@@ -10,17 +26,6 @@ from tensorflow.keras.layers import Input, Embedding, Flatten, Dense
 import sys
 # add parent directory to Python path for layers.py access
 sys.path.append('..')
-splits = {'train': 'data/train-00000-of-00001.parquet',
-          'validation': 'data/validation-00000-of-00001.parquet', 'test': 'data/test-00000-of-00001.parquet'}
-train_df = pd.read_parquet(
-    "hf://datasets/google-research-datasets/poem_sentiment/" + splits["train"])
-validation_df = pd.read_parquet(
-    "hf://datasets/google-research-datasets/poem_sentiment/" + splits["validation"])
-test_df = pd.read_parquet(
-    "hf://datasets/google-research-datasets/poem_sentiment/" + splits["test"])
-# verse_text, label
-# label: 0 = negative, 1 = positive, 2 = no_impact, 3 = mixed
-
 
 # Argument specification
 parser = argparse.ArgumentParser()
@@ -32,22 +37,32 @@ parser.add_argument("--config",
 # 1: Simple Multi-Layer Perceptron Model w/ Self-Attention (Non-Penalized)
 # 2: Simple Multi-Layer Perceptron Model w/ Self-Attention (Penalized)
 args = parser.parse_args()
-tf.random.set_seed(4000)
+
+# Set seeds for reproducibility
+tf.random.set_seed(500)
+
+# Set global constants
 vocabulary_size = 10000  # choose 10k most-used words for truncated vocabulary
-# choose 1000-word sequences, either pad or truncate sequences to this
-sequence_length = 900
+# choose 500-word sequences, either pad or truncate sequences to this
+sequence_length = 500
 embedding_dims = 50      # number of dimensions to represent each word in vector space
 batch_size = 100         # feed in the neural network in 100-example training batches
-num_epochs = 100
-config = 0
-(X_train, Y_train), (X_validation,
-                     Y_validation) = train_df['verse_text'].values, train_df['label'].values, validation_df['verse_text'].values, validation_df['label'].values
+# number of times the neural network goes over EACH training example
+num_epochs = 10
+config = int(args.config)  # model configuration
 
+# Load the IMDB dataset for sentiment classification
+(X_train, Y_train), (X_test, Y_test) = imdb.load_data(num_words=vocabulary_size)
+
+# Pad & truncate sequences to fixed sequence length
 X_train = pad_sequences(sequences=X_train, maxlen=sequence_length)
-X_validation = pad_sequences(sequences=X_validation, maxlen=sequence_length)
+X_test = pad_sequences(sequences=X_test, maxlen=sequence_length)
 
+# Create word-level binary sentiment classification model
+# Input Layer
 X = Input(shape=(sequence_length,), batch_size=batch_size)
 
+# Word-Embedding Layer
 embedded = Embedding(input_dim=vocabulary_size, output_dim=embedding_dims)(X)
 
 # Optional Self-Attention Mechanisms
@@ -76,7 +91,5 @@ print(model.summary())
 
 # Train binary-classification model
 model.fit(x=X_train, y=Y_train,
-          validation_data=(X_validation, Y_validation),
+          validation_data=(X_test, Y_test),
           epochs=num_epochs, batch_size=batch_size)
-y_pred = model.predict(test_df['verse_text'])
-print(y_pred, test_df['label'])
